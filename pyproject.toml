@@ -8,15 +8,34 @@ authors = [
     { name = "Daniel Senften", email = "daniel.senften@talent-factory.ch" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "opentelemetry-api>=1.28",
+    "opentelemetry-sdk>=1.28",
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+]
 classifiers = [
     "Private :: Do Not Upload",
+]
+
+# Instrumentierungs-Extras: FastAPI/Celery bleiben optional, damit Konsumenten ohne
+# diese Frameworks (z.B. ein reiner Worker ohne FastAPI) keine ungenutzten
+# Abhaengigkeiten mitziehen (TF-849).
+[project.optional-dependencies]
+fastapi = [
+    "fastapi>=0.115",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+]
+celery = [
+    "celery>=5.4",
+    "opentelemetry-instrumentation-celery>=0.49b0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
     "ruff>=0.7",
+    "specula-client[fastapi,celery]",
+    "httpx>=0.27",
 ]
 
 [build-system]
@@ -29,3 +48,4 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
