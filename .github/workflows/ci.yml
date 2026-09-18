@@ -1,0 +1,22 @@
+name: CI
+
+# Lint + Tests fuer die Specula-Client-Library.
+# Laeuft auf jedem PR nach main sowie auf Pushes nach main.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint + Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run pytest

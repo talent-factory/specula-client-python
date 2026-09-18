@@ -1,0 +1,29 @@
+# Tool-Artefakte (lokal, nicht versionieren)
+.claude/
+.headroom/
+.serena/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Build-Artefakte
+dist/
+build/
+*.egg-info/
+
+# Coverage
+.coverage
+htmlcov/
+
+# OS / Editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
