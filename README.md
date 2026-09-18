@@ -14,8 +14,10 @@ als versionierte Dependency von mehreren Produkt-Repos referenziert wird.
 
 ## Status
 
-OTel-Traces-Setup (TF-849) und Logging-Integration (`SpeculaLogHandler`, TF-850) sind
-verfügbar (beide extrahiert aus `ratum`-ADR-012). PII-Scrubbing folgt in einem Folge-Ticket.
+OTel-Traces-Setup (TF-849), Logging-Integration (`SpeculaLogHandler`, TF-850) und
+PII-Scrubbing (`PiiScrubber`/`scrub_pii`, TF-851) sind verfügbar (Traces/Logging extrahiert
+aus `ratum`-ADR-012, Scrubbing neu gebaut nach dem Vorbild von `examcraft-private`s Sentry-
+`EventScrubber`).
 
 ## Installation
 
@@ -108,6 +110,46 @@ Alerting auf Specula-Zustellprobleme braucht, muss dafuer stderr/Container-Logs 
 
 `configure_logging()`/dictConfig-Wiring, wie `ratum` es nutzt, ist bewusst NICHT Teil dieser
 Bibliothek - jedes Produkt haengt `SpeculaLogHandler` an seine eigene Logging-Konfiguration.
+
+## Verwendung: PII-Scrubbing (`PiiScrubber`/`scrub_pii`)
+
+Redigiert bekannte sensible Feldnamen (Passwörter, Tokens, API-Keys, ...) in beliebig
+verschachtelten dict/list-Strukturen — nützlich z.B. für Log-`extra`-Payloads oder
+Request-Bodies, bevor sie an den geteilten Collector gehen.
+
+```python
+from specula_client import scrub_pii
+
+payload = {
+    "user": {"email": "daniel@example.com", "password": "hunter2"},
+    "headers": {"Authorization": "Bearer abc123"},
+}
+
+scrub_pii(payload)
+# {
+#     "user": {"email": "daniel@example.com", "password": "[REDACTED]"},
+#     "headers": {"Authorization": "[REDACTED]"},
+# }
+```
+
+Feldname-Matching ist case-insensitiv und Teilstring-basiert (`"token"` trifft z.B. auch
+`"auth_token"` oder `"refresh-token"`) — ein übersehenes sensibles Feld wiegt schwerer als
+ein zu Unrecht redigiertes.
+
+Die Default-Denylist (`password`, `token`, `api_key`, `secret`, `authorization`) ist pro
+Aufrufer erweiterbar, z.B. für produktspezifische Zusatzfelder:
+
+```python
+from specula_client import PiiScrubber
+
+# Einmal konfigurieren, mehrfach wiederverwenden (z.B. als Modul-Singleton im aufrufenden Produkt).
+scrubber = PiiScrubber(extra_denylist=["ssn", "employee_id"])
+scrubber.scrub({"employee_id": "42", "name": "Daniel"})
+# {"employee_id": "[REDACTED]", "name": "Daniel"}
+```
+
+`scrub_pii()`/`PiiScrubber.scrub()` verändern die Eingabe nicht, sondern geben eine neue,
+redigierte Kopie zurück.
 
 ## Versionierung
 
