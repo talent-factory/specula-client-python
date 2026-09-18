@@ -43,7 +43,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger("specula_client.tracing")
 
 
-def _log_tracing_disabled(otel_exporter_endpoint: str | None, specula_team_api_key: str | None) -> None:
+def _log_tracing_disabled(
+    otel_exporter_endpoint: str | None, specula_team_api_key: str | None
+) -> None:
     logger.info(
         "Tracing deaktiviert: otel_exporter_endpoint=%s, specula_team_api_key=%s (beide "
         "erforderlich).",
@@ -147,8 +149,7 @@ def init_tracing(
         CeleryInstrumentor().instrument()
     except Exception:  # analog init_tracing().
         logger.exception(
-            "Celery-Instrumentierung fehlgeschlagen — Traces sind aktiv, aber ohne "
-            "Celery-Spans."
+            "Celery-Instrumentierung fehlgeschlagen — Traces sind aktiv, aber ohne Celery-Spans."
         )
 
 

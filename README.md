@@ -85,16 +85,26 @@ if settings.otel_exporter_endpoint and settings.specula_team_api_key:
     )
     # Nur WARNING+ an den geteilten Collector (DSGVO) - Konsole/lokale Logs koennen
     # ein niedrigeres Level haben, das ist Sache der eigenen Logging-Konfiguration.
+    #
+    # WICHTIG: NIE an den Root-Logger auf INFO (oder tiefer) haengen, ohne das Level
+    # explizit auf WARNING+ zu setzen - httpx (das der Handler intern nutzt) loggt jeden
+    # Request selbst auf INFO. Der Handler filtert httpx/httpcore zwar selbst heraus
+    # (Re-Entrancy-Schutz), ein zu niedriges Level exportiert aber trotzdem jede eigene
+    # Anwendungs-INFO-Zeile an den Collector.
     handler.setLevel(logging.WARNING)
     logger.addHandler(handler)
 ```
 
 Jede Log-Zeile, die innerhalb einer aktiven OTel-Span passiert (z.B. nach `init_tracing()` +
 `instrument_fastapi_app()`), traegt automatisch `traceId`/`spanId` dieser Span - so fuehrt aus
-einem Log in HyperDX ein direkter Weg zum zugehoerigen Request-Trace. Zusaetzliche
+einem Log im Specula-Backend ein direkter Weg zum zugehoerigen Request-Trace. Zusaetzliche
 `extra={"specula_xyz": ...}`-Keyword-Argumente am Log-Call werden generisch als
 `specula.xyz`-OTLP-Attribut exportiert (z.B. `extra={"specula_signal_type": "unhandled_exception"}`
-fuer Trigger-Matching).
+fuer Trigger-Matching) - falsy Werte (`0`, `False`, `""`) werden dabei nicht exportiert.
+
+**Zustellfehler und ein voller Export-Puffer werden NICHT ueber das eigene Logging-System
+gemeldet** (Rekursionsgefahr), sondern nur auf stderr (`[specula] ...`) - wer eigenes
+Alerting auf Specula-Zustellprobleme braucht, muss dafuer stderr/Container-Logs beobachten.
 
 `configure_logging()`/dictConfig-Wiring, wie `ratum` es nutzt, ist bewusst NICHT Teil dieser
 Bibliothek - jedes Produkt haengt `SpeculaLogHandler` an seine eigene Logging-Konfiguration.
