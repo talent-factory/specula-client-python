@@ -12,6 +12,10 @@ dependencies = [
     "opentelemetry-api>=1.28",
     "opentelemetry-sdk>=1.28",
     "opentelemetry-exporter-otlp-proto-http>=1.28",
+    # SpeculaLogHandler (TF-850) postet den OTLP/HTTP-Logs-Payload hand-gerollt statt ueber
+    # das OTel-Logs-SDK - httpx ist daher eine Kern-Abhaengigkeit, nicht instrumentierungs-
+    # spezifisch wie die fastapi/celery-Extras.
+    "httpx>=0.27",
 ]
 classifiers = [
     "Private :: Do Not Upload",
@@ -35,7 +39,6 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.7",
     "specula-client[fastapi,celery]",
-    "httpx>=0.27",
 ]
 
 [build-system]
