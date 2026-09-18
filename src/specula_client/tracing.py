@@ -1,21 +1,28 @@
 """OpenTelemetry-Traces-Setup, extrahiert aus `ratum/backend/app/monitoring.py` (ADR-012, TF-849).
 
-Im Original war jeder Wert (Endpoint, API-Key, Sample-Rate, Environment, Release) an
-ratums `app.config.settings`-Singleton gebunden. Hier werden dieselbe Sampler-/
-Exporter-/Instrumentierungslogik beibehalten, aber alle Werte als explizite Parameter
-uebergeben, damit mehrere Talent-Factory-Produkte dieselbe Funktion wiederverwenden
-koennen.
+ADR-012 (ratum) legt fest: Monitoring ist fail-open (ein fehlender/ausgefallener Collector
+darf den Start des Aufrufers nie verhindern) und Traces laufen ueber einen flottenweiten,
+geteilten Collector (Specula). Im Original war jeder Wert (Endpoint, API-Key, Sample-Rate,
+Environment, Release) an ratums `app.config.settings`-Singleton gebunden. Sampler-/Exporter-
+/Instrumentierungslogik sind hier unveraendert; alle Werte werden jedoch als explizite
+Parameter uebergeben, damit mehrere Talent-Factory-Produkte dieselbe Funktion wiederverwenden
+koennen. Eine Abweichung: `environment`/`release` sind hier beide optional (im ratum-Original
+war `deployment.environment` unconditional gesetzt) - nicht jedes Produkt fuehrt zwingend
+einen Environment-String.
 
-``instrument_fastapi_app()`` bleibt bewusst von ``init_tracing()`` getrennt: sie
-braucht eine bereits konstruierte ``FastAPI``-Instanz, die beim allgemeinen Init
-(vor dem App-Aufbau, damit auch z.B. Celery-seitige Fehler erfasst wuerden) noch
-nicht existiert (siehe ratum-Original fuer die volle Herleitung).
+``instrument_fastapi_app()`` bleibt bewusst von ``init_tracing()`` getrennt: ``init_tracing()``
+soll so frueh wie moeglich in jedem Prozess laufen (API- und Worker-Prozess, je mit eigenem
+``service_name``), bevor ueberhaupt ein App-Objekt existiert - `instrument_fastapi_app()`
+braucht dagegen die bereits konstruierte ``FastAPI``-Instanz.
 
 ``instrument_celery`` ist ein expliziter Opt-in (Default: ``False``) statt wie im
 ratum-Original immer aktiv: eine generische Bibliothek soll nicht jeden Konsumenten
 zwingen, `celery` + `opentelemetry-instrumentation-celery` zu installieren, nur weil
-ein anderes Produkt Celery nutzt. Der Import passiert daher lazy, ebenso wie der von
-`opentelemetry-instrumentation-fastapi` in ``instrument_fastapi_app()``.
+ein anderes Produkt Celery nutzt. Ebenso wird `opentelemetry-instrumentation-fastapi` in
+``instrument_fastapi_app()`` lazy importiert. Ein fehlendes Extra (`ImportError`) wird dabei
+bewusst separat von einem echten Instrumentierungsfehler behandelt (siehe unten) - sonst
+verschleiert die generische Fehlermeldung, dass schlicht ein `pip install specula-client[...]`
+fehlt.
 """
 
 from __future__ import annotations
@@ -36,6 +43,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger("specula_client.tracing")
 
 
+def _log_tracing_disabled(otel_exporter_endpoint: str | None, specula_team_api_key: str | None) -> None:
+    logger.info(
+        "Tracing deaktiviert: otel_exporter_endpoint=%s, specula_team_api_key=%s (beide "
+        "erforderlich).",
+        "gesetzt" if otel_exporter_endpoint else "fehlt",
+        "gesetzt" if specula_team_api_key else "fehlt",
+    )
+
+
 def _build_tracer_provider(
     service_name: str,
     *,
@@ -49,7 +65,8 @@ def _build_tracer_provider(
     # geteilter Collector — ohne `deployment.environment` liessen sich Traces aus
     # staging/production nicht trennen, ohne `service.version` (i.d.R. Git-SHA) kein
     # Incident->Deploy-Mapping mehr. Weggelassen statt eines leeren Werts, wenn der
-    # Aufrufer sie nicht mitgibt.
+    # Aufrufer sie nicht mitgibt (bewusste Abweichung vom ratum-Original, siehe Modul-
+    # Docstring: dort war `deployment.environment` unconditional gesetzt).
     attributes: dict[str, str] = {"service.name": service_name}
     if environment:
         attributes["deployment.environment"] = environment
@@ -59,7 +76,7 @@ def _build_tracer_provider(
     sampler = ParentBased(TraceIdRatioBased(sample_rate))
     provider = TracerProvider(resource=resource, sampler=sampler)
     exporter = OTLPSpanExporter(
-        endpoint=f"{otel_exporter_endpoint}/v1/traces",
+        endpoint=f"{otel_exporter_endpoint.rstrip('/')}/v1/traces",
         headers={"Authorization": specula_team_api_key},
     )
     provider.add_span_processor(BatchSpanProcessor(exporter))
@@ -81,13 +98,23 @@ def init_tracing(
     Beide Werte (``otel_exporter_endpoint``, ``specula_team_api_key``) muessen gesetzt
     sein: fehlt nur der Key, wuerden sonst Traces mit leerem ``Authorization``-Header
     gegen einen Auth-erzwingenden Collector exportiert (Hintergrund-Retry-Loop) statt
-    sauber deaktiviert zu bleiben (siehe ratum-Original, "I2, finaler Review-Fund").
+    sauber deaktiviert zu bleiben. Der No-op-Fall wird auf INFO geloggt, damit eine
+    unbeabsichtigt fehlende Config nicht komplett unsichtbar bleibt.
+
+    ``sample_rate`` (Default ``1.0``, wie im ratum-Original) ist bewusst nicht production-
+    getunt - Aufrufer sollten ihn aus der eigenen Config setzen.
 
     Ein fehlender/ausgefallener Collector darf den Start des Aufrufers nie verhindern
-    (ADR-012) — daher Try/Except um die komplette Initialisierung.
+    (ADR-012) — daher Try/Except um Provider-Aufbau und -Registrierung. Fehlt fuer
+    ``instrument_celery=True`` das optionale `celery`-Extra, wird das separat und mit
+    einer auf die fehlende Abhaengigkeit hinweisenden Meldung geloggt, statt es als
+    allgemeinen Traces-Ausfall zu melden (der TracerProvider ist zu diesem Zeitpunkt
+    bereits erfolgreich gesetzt).
     """
     if not (otel_exporter_endpoint and specula_team_api_key):
+        _log_tracing_disabled(otel_exporter_endpoint, specula_team_api_key)
         return
+
     try:
         provider = _build_tracer_provider(
             service_name,
@@ -98,14 +125,30 @@ def init_tracing(
             release=release,
         )
         trace.set_tracer_provider(provider)
-        if instrument_celery:
-            from opentelemetry.instrumentation.celery import CeleryInstrumentor
-
-            CeleryInstrumentor().instrument()
     except Exception:  # Monitoring darf den Start nie verhindern (ADR-012).
         logger.exception(
             "OpenTelemetry-Initialisierung fehlgeschlagen (otel_exporter_endpoint evtl. "
             "ungueltig) — Prozess startet trotzdem, aber ohne Traces."
+        )
+        return
+
+    if not instrument_celery:
+        return
+    try:
+        from opentelemetry.instrumentation.celery import CeleryInstrumentor
+    except ImportError:
+        logger.exception(
+            "instrument_celery=True, aber 'opentelemetry-instrumentation-celery' ist nicht "
+            "installiert — `pip install specula-client[celery]` nachholen. Traces sind "
+            "aktiv, aber ohne Celery-Spans."
+        )
+        return
+    try:
+        CeleryInstrumentor().instrument()
+    except Exception:  # analog init_tracing().
+        logger.exception(
+            "Celery-Instrumentierung fehlgeschlagen — Traces sind aktiv, aber ohne "
+            "Celery-Spans."
         )
 
 
@@ -121,10 +164,19 @@ def instrument_fastapi_app(
     Erfassung) — das ist hier bewusst der DSGVO-Schutz (siehe ratum-ADR-012).
     """
     if not (otel_exporter_endpoint and specula_team_api_key):
+        _log_tracing_disabled(otel_exporter_endpoint, specula_team_api_key)
         return
+
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-
+    except ImportError:
+        logger.exception(
+            "instrument_fastapi_app() aufgerufen, aber 'opentelemetry-instrumentation-fastapi' "
+            "ist nicht installiert — `pip install specula-client[fastapi]` nachholen. Kein "
+            "Request-Tracing."
+        )
+        return
+    try:
         FastAPIInstrumentor.instrument_app(app)
     except Exception:  # analog init_tracing().
         logger.exception(

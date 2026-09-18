@@ -42,6 +42,7 @@ was das jeweilige Produkt tatsächlich nutzt.
 ```python
 from specula_client import init_tracing, instrument_fastapi_app
 
+# `settings` = die eigene Produkt-Config (z.B. pydantic-settings), kein Teil von specula-client.
 # Frueh beim Prozessstart aufrufen (API- und Worker-Prozess je mit eigenem service_name),
 # bevor eine evtl. vorhandene FastAPI-App gebaut wird. No-op, falls Endpoint/API-Key fehlen.
 init_tracing(

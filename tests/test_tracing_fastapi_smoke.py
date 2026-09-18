@@ -1,26 +1,16 @@
-"""Smoke-Test: `specula_client.tracing` gegen eine echte, minimale FastAPI-App (TF-849, AC3)."""
+"""Smoke-Test: `specula_client.tracing` gegen eine echte, minimale FastAPI-App (TF-849, AC3).
 
-import pytest
+Die TracerProvider-Isolation zwischen den Tests uebernimmt die
+`reset_global_tracer_provider`-Fixture in `tests/conftest.py`.
+"""
+
 from fastapi.testclient import TestClient
 from opentelemetry import trace as trace_api
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.util._once import Once
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+import specula_client.tracing as tracing_module
 from examples.minimal_fastapi_app import create_app_with_tracing
-
-
-@pytest.fixture(autouse=True)
-def _reset_global_tracer_provider():
-    original_provider = trace_api._TRACER_PROVIDER
-    trace_api._TRACER_PROVIDER_SET_ONCE = Once()
-    yield
-    installed_provider = trace_api._TRACER_PROVIDER
-    if installed_provider is not None and installed_provider is not original_provider:
-        shutdown = getattr(installed_provider, "shutdown", None)
-        if callable(shutdown):
-            shutdown()
-    trace_api._TRACER_PROVIDER = original_provider
-    trace_api._TRACER_PROVIDER_SET_ONCE = Once()
 
 
 def test_app_without_tracing_config_serves_requests_normally():
@@ -34,7 +24,16 @@ def test_app_without_tracing_config_serves_requests_normally():
     assert not isinstance(trace_api.get_tracer_provider(), TracerProvider)
 
 
-def test_app_with_tracing_enabled_serves_requests_and_sets_tracer_provider():
+def test_app_with_tracing_enabled_serves_requests_and_sets_tracer_provider(monkeypatch):
+    # Der OTLPSpanExporter versucht bei JEDEM Fehler (auch "Connection refused") mehrfach
+    # mit exponentiellem Backoff erneut zu exportieren (Review-Fund: >6s beim Fixture-
+    # Teardown, unabhaengig von DNS - selbst ein lokaler, garantiert verweigerter Port
+    # loest diese Retry-Logik aus). Fuer einen deterministischen, schnellen Test wird der
+    # echte Exporter durch einen In-Memory-Exporter ersetzt; der Smoke-Test prueft ohnehin
+    # nur die Verdrahtung (Provider gesetzt, App bleibt funktionsfaehig), nicht den
+    # Netzwerk-Export selbst.
+    monkeypatch.setattr(tracing_module, "OTLPSpanExporter", lambda *a, **kw: InMemorySpanExporter())
+
     app = create_app_with_tracing(
         service_name="example-app",
         otel_exporter_endpoint="http://collector.internal:4318",
