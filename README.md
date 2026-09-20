@@ -1,9 +1,9 @@
 # specula-client
 
 Geteilte Observability-Client-Library fuer Talent-Factory-Produkte (`ratum`,
-`examcraft-private`, ...). Buendelt das OpenTelemetry-SDK-Setup, Logging-Integration
-(`SpeculaLogHandler`) und PII-Scrubbing, die bisher pro Produkt dupliziert wurden
-(siehe `ratum`-ADR-012).
+`examcraft-private`, ...). Buendelt das OpenTelemetry-SDK-Setup und die Logging-Integration
+(`SpeculaLogHandler`), die bisher pro Produkt dupliziert waren (siehe `ratum`-ADR-012), sowie
+ein neu gebautes PII-Scrubbing-Modul (`PiiScrubber`).
 
 Teil des [Specula](https://linear.app/talent-factory/project/specula)-Projekts:
 ein selbst betriebenes, OpenTelemetry-natives Observability-Produkt, das Sentry,
@@ -14,8 +14,10 @@ als versionierte Dependency von mehreren Produkt-Repos referenziert wird.
 
 ## Status
 
-OTel-Traces-Setup (TF-849) und Logging-Integration (`SpeculaLogHandler`, TF-850) sind
-verfügbar (beide extrahiert aus `ratum`-ADR-012). PII-Scrubbing folgt in einem Folge-Ticket.
+OTel-Traces-Setup (TF-849), Logging-Integration (`SpeculaLogHandler`, TF-850) und
+PII-Scrubbing (`PiiScrubber`/`scrub_pii`, TF-851) sind verfügbar (Traces/Logging extrahiert
+aus `ratum`-ADR-012, Scrubbing neu gebaut nach dem Vorbild von `examcraft-private`s Sentry-
+`EventScrubber`).
 
 ## Installation
 
@@ -108,6 +110,58 @@ Alerting auf Specula-Zustellprobleme braucht, muss dafuer stderr/Container-Logs 
 
 `configure_logging()`/dictConfig-Wiring, wie `ratum` es nutzt, ist bewusst NICHT Teil dieser
 Bibliothek - jedes Produkt haengt `SpeculaLogHandler` an seine eigene Logging-Konfiguration.
+
+## Verwendung: PII-Scrubbing (`PiiScrubber`/`scrub_pii`)
+
+Redigiert bekannte sensible Feldnamen (Passwörter, Tokens, API-Keys, ...) rekursiv in
+beliebig verschachtelten dict/list/tuple/set/Dataclass/Namedtuple-Strukturen — nützlich z.B.
+für Log-`extra`-Payloads oder Request-Bodies, bevor sie an den geteilten Collector gehen.
+
+```python
+from specula_client import scrub_pii
+
+payload = {
+    "user": {"email": "daniel@example.com", "password": "hunter2"},
+    "headers": {"Authorization": "Bearer abc123"},
+}
+
+scrub_pii(payload)
+# {
+#     "user": {"email": "daniel@example.com", "password": "[REDACTED]"},
+#     "headers": {"Authorization": "[REDACTED]"},
+# }
+```
+
+Feldname-Matching ist case-insensitiv und Teilstring-basiert (`"token"` trifft z.B. auch
+`"auth_token"` oder `"refresh-token"`), zusaetzlich werden `_`/`-` vor dem Vergleich entfernt
+(`"api_key"`, `"apiKey"` und `"x-api-key"` matchen alle) — ein übersehenes sensibles Feld
+wiegt schwerer als ein zu Unrecht redigiertes. Dieselbe Grosszuegigkeit kann bei generischen
+Begriffen wie `token` auch harmlose Felder treffen (z.B. `total_tokens` bei einem
+LLM-Produkt) — das ist ein bewusster Trade-off, kein Bug.
+
+Die Default-Denylist (`password`, `token`, `api_key`, `secret`, `authorization`) ist pro
+Aufrufer erweiterbar, z.B. für produktspezifische Zusatzfelder:
+
+```python
+from specula_client import PiiScrubber
+
+# Einmal konfigurieren, mehrfach wiederverwenden (z.B. als Modul-Singleton im aufrufenden Produkt).
+scrubber = PiiScrubber(extra_denylist=["ssn", "employee_id"])
+scrubber.scrub({"employee_id": "42", "name": "Daniel"})
+# {"employee_id": "[REDACTED]", "name": "Daniel"}
+```
+
+Ein leerer/nur aus `_`/`-` bestehender oder nicht-string `extra_denylist`-Eintrag lässt den
+Konstruktor sofort mit `ValueError`/`TypeError` fehlschlagen, statt (im leeren Fall) still
+jedes Feld zu redigieren.
+
+`scrub_pii()`/`PiiScrubber.scrub()` verändern die Eingabe nicht, sondern geben eine neue,
+redigierte Kopie zurück. Unterstützt werden `dict`/`list`/`tuple`/`set`/`frozenset`,
+Dataclasses und Namedtuples (bei Letzteren werden Feldnamen wie bei einem dict geprüft) sowie
+JSON-taugliche Skalare (`str`/`int`/`float`/`bool`/`bytes`/`None`). Ein nicht erkannter
+Objekttyp (z.B. ein Pydantic-Modell) wird **nicht** still unredigiert durchgereicht, sondern
+löst einen `TypeError` aus — vorher explizit serialisieren (z.B. `.model_dump()`/
+`dataclasses.asdict()`).
 
 ## Versionierung
 
