@@ -1,0 +1,26 @@
+# Changelog
+
+Alle nennenswerten Aenderungen an `specula-client` werden hier dokumentiert.
+
+Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung
+folgt [SemVer](https://semver.org/lang/de/) ueber Git-Tags (`vX.Y.Z`) - siehe README,
+Abschnitt "Versionierung".
+
+## [0.1.0] - 2026-09-20
+
+Erstes stabiles Release. Buendelt OTel-Traces-Setup, Logging-Integration und PII-Scrubbing,
+extrahiert bzw. neu gebaut nach dem Vorbild von `ratum`-ADR-012 und `examcraft-private`s
+Sentry-`EventScrubber`.
+
+### Hinzugefuegt
+
+- **Traces (OpenTelemetry)** (TF-849): `init_tracing()`/`instrument_fastapi_app()` fuer
+  OTel-SDK-Setup inkl. optionaler FastAPI-/Celery-Instrumentierung (Extras `fastapi`/`celery`).
+- **Logging** (TF-850): `SpeculaLogHandler` fuer strukturierte Log-Weiterleitung an Speculas
+  OTLP/HTTP-Logs-Endpoint, inkl. Trace-Log-Korrelation und Re-Entrancy-Schutz gegen
+  httpx-Feedback-Loops.
+- **PII-Scrubbing** (TF-851): `PiiScrubber`/`scrub_pii()` fuer rekursives Redacting bekannter
+  sensibler Feldnamen (`password`, `token`, `api_key`, `secret`, `authorization`, erweiterbar
+  per `extra_denylist`) in dict/list/tuple/set/Dataclass/Namedtuple-Strukturen.
+
+[0.1.0]: https://github.com/talent-factory/specula-client-python/releases/tag/v0.1.0
