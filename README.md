@@ -167,7 +167,8 @@ löst einen `TypeError` aus — vorher explizit serialisieren (z.B. `.model_dump
 
 Semantische Versionierung (SemVer) über Git-Tags (`vX.Y.Z`). Konsumierende Repos
 pinnen immer auf einen konkreten Tag, nie auf einen Branch, damit Updates
-bewusst und reproduzierbar bleiben.
+bewusst und reproduzierbar bleiben. Änderungen pro Version stehen im
+[CHANGELOG](CHANGELOG.md).
 
 ## Entwicklung
 
