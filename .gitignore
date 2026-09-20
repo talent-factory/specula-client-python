@@ -2,6 +2,7 @@
 .claude/
 .headroom/
 .serena/
+.worktrees/
 
 # Python
 __pycache__/
