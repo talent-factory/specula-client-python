@@ -5,7 +5,7 @@ from specula_client.sanitizing import sanitize_url, strip_control_chars
 from specula_client.scrubbing import DEFAULT_DENYLIST, REDACTED, PiiScrubber, scrub_pii
 from specula_client.tracing import init_tracing, instrument_fastapi_app
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     "DEFAULT_DENYLIST",

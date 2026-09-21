@@ -22,6 +22,13 @@ import re
 # redigieren, ohne pro Produkt eine eigene Pfad-Konvention zu pflegen.
 _SIGN_TOKEN_PATH = re.compile(r"/sign/[^/?#]+")
 
+# Matcht ein optionales Schema gefolgt von `user[:pass]@` in der URL-Autoritaet (TF-895,
+# z.B. "https://user:pass@host/..."). An den Stringanfang UND an Zeichen vor dem ersten "/"
+# gebunden (`[^/@]*`), damit niemals ein unbeteiligtes "@" weiter hinten im Pfad getroffen
+# wird (z.B. "https://example.com/path@2x.png" muss unveraendert bleiben - dort steht "/"
+# vor dem "@", also bricht das Matching vorher ab statt ueber die Pfadgrenze zu "springen").
+_USERINFO = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.-]*://)?[^/@]*@")
+
 # Alle ASCII-Steuerzeichen ausser Tab (\x09) - Tab ist in einer Log-Zeile harmlos, \r/\n und die
 # uebrigen C0-Controls koennen dagegen zeilenorientierte Log-Formatter (Fly-/Konsolen-Logs) fuer
 # Log-Injection missbrauchen (siehe ratum-Originaldocstring).
@@ -32,13 +39,15 @@ def sanitize_url(url: str) -> str:
     """Redigiert eine roh vom Client gelieferte URL vor dem Loggen.
 
     Strippt Query-String und Fragment pauschal (koennen Capability-Token tragen, z.B.
-    `/verify-email?token=...`/`/reset-password?token=...`) und redigiert zusaetzlich
+    `/verify-email?token=...`/`/reset-password?token=...`), entfernt Userinfo-Credentials aus
+    der URL-Autoritaet (`https://user:pass@host/...`, TF-895) und redigiert zusaetzlich
     `/sign/:token`-artige Pfad-Segmente, bei denen das Token selbst Teil des Pfads statt des
     Query-Strings ist. Gibt bei einem bereits sauberen `url`-Wert die (unveraenderte) URL ohne
     Query-String/Fragment zurueck.
     """
     without_query = url.split("?", 1)[0].split("#", 1)[0]
-    return _SIGN_TOKEN_PATH.sub("/sign/<redacted>", without_query)
+    without_userinfo = _USERINFO.sub(r"\1", without_query)
+    return _SIGN_TOKEN_PATH.sub("/sign/<redacted>", without_userinfo)
 
 
 def strip_control_chars(text: str) -> str:
