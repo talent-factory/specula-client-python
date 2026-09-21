@@ -53,6 +53,18 @@ def test_sanitize_url_strips_userinfo_without_scheme():
     assert "secret" not in result
 
 
+def test_sanitize_url_strips_userinfo_with_at_sign_embedded_in_password():
+    # Parser-Differential-Regressionstest: ein Passwort mit eingebettetem "@" darf nicht nur
+    # bis zum ERSTEN "@" redigiert werden (das wuerde den Rest des Passworts als scheinbaren
+    # Host im Log stehen lassen) - Browser/WHATWG-URL-Parser trennen die Autoritaet am
+    # LETZTEN "@" vor dem ersten "/", das muss diese Funktion auch tun.
+    result = sanitize_url("https://user:p@ss@example.com/path")
+
+    assert result == "https://example.com/path"
+    assert "p@ss" not in result
+    assert "ss@example.com" not in result
+
+
 def test_sanitize_url_does_not_treat_an_at_sign_in_the_path_as_userinfo():
     # Ein "@" nach dem ersten "/" gehoert zum Pfad, nicht zur Autoritaet - z.B. eine
     # Bild-Datei mit "@2x" im Namen darf nicht faelschlich als Userinfo-Praefix gelesen werden.
