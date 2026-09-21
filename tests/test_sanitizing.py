@@ -1,0 +1,62 @@
+"""Tests fuer specula_client.sanitizing (TF-892)."""
+
+from specula_client.sanitizing import sanitize_url, strip_control_chars
+
+
+def test_sanitize_url_strips_query_string():
+    # Query-Strings koennen Capability-Token tragen (z.B. /reset-password?token=...).
+    result = sanitize_url("https://example.com/reset-password?token=super-secret")
+
+    assert result == "https://example.com/reset-password"
+    assert "super-secret" not in result
+
+
+def test_sanitize_url_strips_fragment():
+    result = sanitize_url("https://example.com/dashboard#section=billing")
+
+    assert result == "https://example.com/dashboard"
+
+
+def test_sanitize_url_redacts_sign_token_path():
+    # /sign/:token traegt die Signatur-Capability direkt im Pfad, nicht im Query-String.
+    result = sanitize_url("https://example.com/sign/abc123def")
+
+    assert result == "https://example.com/sign/<redacted>"
+    assert "abc123def" not in result
+
+
+def test_sanitize_url_leaves_clean_url_unchanged():
+    result = sanitize_url("https://example.com/dashboard")
+
+    assert result == "https://example.com/dashboard"
+
+
+def test_strip_control_chars_neutralizes_newlines():
+    # Ohne Sanitisierung koennte ein Aufrufer eine gefaelschte zusaetzliche Log-Zeile
+    # einschleusen (Log-Injection).
+    result = strip_control_chars("boom\nERROR app.security: fake admin login from 1.2.3.4")
+
+    assert "\n" not in result
+    assert not any(line.strip().startswith("ERROR app.security") for line in result.splitlines())
+    # Inhalt bleibt (best-effort) sichtbar, nur nicht mehr als eigenstaendige Zeile.
+    assert "fake admin login" in result
+
+
+def test_strip_control_chars_neutralizes_carriage_return():
+    result = strip_control_chars("at foo\r\nat bar")
+
+    assert "\r" not in result
+    assert "\n" not in result
+
+
+def test_strip_control_chars_leaves_plain_text_unchanged():
+    result = strip_control_chars("TypeError: x is undefined")
+
+    assert result == "TypeError: x is undefined"
+
+
+def test_strip_control_chars_keeps_tab():
+    # Tab ist in einer Log-Zeile harmlos, kein Injection-Vektor.
+    result = strip_control_chars("a\tb")
+
+    assert result == "a\tb"
