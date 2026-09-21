@@ -6,6 +6,17 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 folgt [SemVer](https://semver.org/lang/de/) ueber Git-Tags (`vX.Y.Z`) - siehe README,
 Abschnitt "Versionierung".
 
+## [0.1.2] - 2026-09-21
+
+### Behoben
+
+- **Sanitizing** (TF-895): `sanitize_url()` entfernt jetzt auch Userinfo-Credentials aus der
+  URL-Autorität (`https://user:pass@host/...`) — bislang wurden nur Query-String/Fragment und
+  `/sign/:token`-Pfade redigiert. Kein Regressionsfehler (dieselbe Lücke bestand bereits im
+  `ratum`-Original), aber ein plausibler Log-Leak-Vektor für roh vom Client geloggte URLs.
+
+[0.1.2]: https://github.com/talent-factory/specula-client-python/releases/tag/v0.1.2
+
 ## [0.1.1] - 2026-09-21
 
 ### Hinzugefuegt

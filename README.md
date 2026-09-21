@@ -16,9 +16,9 @@ als versionierte Dependency von mehreren Produkt-Repos referenziert wird.
 
 OTel-Traces-Setup (TF-849), Logging-Integration (`SpeculaLogHandler`, TF-850),
 PII-Scrubbing (`PiiScrubber`/`scrub_pii`, TF-851) und URL-/Control-Char-Sanitizing
-(`sanitize_url`/`strip_control_chars`, TF-892) sind verfügbar (Traces/Logging/Sanitizing
-extrahiert aus `ratum`-ADR-012, Scrubbing neu gebaut nach dem Vorbild von `examcraft-private`s
-Sentry-`EventScrubber`).
+(`sanitize_url`/`strip_control_chars`, TF-892, inkl. Userinfo-Credential-Stripping seit TF-895)
+sind verfügbar (Traces/Logging/Sanitizing extrahiert aus `ratum`-ADR-012, Scrubbing neu gebaut
+nach dem Vorbild von `examcraft-private`s Sentry-`EventScrubber`).
 
 ## Installation
 

@@ -1,6 +1,6 @@
 [project]
 name = "specula-client"
-version = "0.1.1"
+version = "0.1.2"
 description = "Shared Specula-Observability-Client (OTel-Setup, Logging, PII-Scrubbing) fuer Talent-Factory-Produkte"
 readme = "README.md"
 license = { file = "LICENSE" }
