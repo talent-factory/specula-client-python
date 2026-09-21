@@ -6,6 +6,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 folgt [SemVer](https://semver.org/lang/de/) ueber Git-Tags (`vX.Y.Z`) - siehe README,
 Abschnitt "Versionierung".
 
+## [0.1.3] - 2026-09-21
+
+### Behoben
+
+- **Sanitizing** (TF-895 Nachbesserung): `sanitize_url()` trennt die URL-Autorität jetzt am
+  **letzten** `@` vor dem ersten `/` statt am ersten — wie WHATWG-URL-Parser (Browser). Der
+  `v0.1.2`-Fix redigierte bei einem Passwort mit eingebettetem `@` (z. B. `user:p@ss@host`)
+  nur bis zum ersten `@`, wodurch der Rest des Passworts als scheinbarer Host im Log
+  sichtbar blieb (Parser-Differential-Bug).
+
+[0.1.3]: https://github.com/talent-factory/specula-client-python/releases/tag/v0.1.3
+
 ## [0.1.2] - 2026-09-21
 
 ### Behoben

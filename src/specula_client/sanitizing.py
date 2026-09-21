@@ -23,11 +23,16 @@ import re
 _SIGN_TOKEN_PATH = re.compile(r"/sign/[^/?#]+")
 
 # Matcht ein optionales Schema gefolgt von `user[:pass]@` in der URL-Autoritaet (TF-895,
-# z.B. "https://user:pass@host/..."). An den Stringanfang UND an Zeichen vor dem ersten "/"
-# gebunden (`[^/@]*`), damit niemals ein unbeteiligtes "@" weiter hinten im Pfad getroffen
-# wird (z.B. "https://example.com/path@2x.png" muss unveraendert bleiben - dort steht "/"
-# vor dem "@", also bricht das Matching vorher ab statt ueber die Pfadgrenze zu "springen").
-_USERINFO = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.-]*://)?[^/@]*@")
+# z.B. "https://user:pass@host/..."). `[^/]*` (statt `[^/@]*`) ist bewusst gewaehlt: greedy
+# ueber ALLE "@" hinweg bis zum LETZTEN "@" vor dem ersten "/" - genau wie WHATWG-URL-Parser
+# (Browser) die Autoritaet trennen. Ein erster Versuch mit `[^/@]*` (stoppt am ERSTEN "@")
+# liess ein Passwort mit eingebettetem "@" (z.B. "user:p@ss@host") nur bis zum ersten "@"
+# redigieren und "ss@host" unredigiert als scheinbaren Host im Log stehen - ein Parser-
+# Differential-Bug derselben Klasse wie die Browser-Obfuskationstechnik
+# "user@fake.example@real-host.example". Der Pfad bleibt trotzdem geschuetzt: `[^/]*` kann
+# "/" nie konsumieren, ein "@" NACH dem ersten "/" (z.B. "/path@2x.png") liegt also ausserhalb
+# des moeglichen Matches.
+_USERINFO = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.-]*://)?[^/]*@")
 
 # Alle ASCII-Steuerzeichen ausser Tab (\x09) - Tab ist in einer Log-Zeile harmlos, \r/\n und die
 # uebrigen C0-Controls koennen dagegen zeilenorientierte Log-Formatter (Fly-/Konsolen-Logs) fuer
