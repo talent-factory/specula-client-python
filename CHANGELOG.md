@@ -6,6 +6,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 folgt [SemVer](https://semver.org/lang/de/) ueber Git-Tags (`vX.Y.Z`) - siehe README,
 Abschnitt "Versionierung".
 
+## [0.1.1] - 2026-09-21
+
+### Hinzugefuegt
+
+- **Sanitizing** (TF-892): `sanitize_url()`/`strip_control_chars()` fuer roh geloggten Freitext
+  (URLs, Fehlermeldungen/Stacktraces) — extrahiert aus `ratum`s `routers/monitoring.py`
+  (ADR-012) fuer einen zweiten Konsumenten (`examcraft-private`, TF-864). Redigiert
+  Query-String/Fragment sowie `/sign/:token`-artige Pfad-Segmente in URLs bzw. neutralisiert
+  Steuerzeichen (Log-Injection-Schutz).
+
+[0.1.1]: https://github.com/talent-factory/specula-client-python/releases/tag/v0.1.1
+
 ## [0.1.0] - 2026-09-20
 
 Erstes stabiles Release. Buendelt OTel-Traces-Setup, Logging-Integration und PII-Scrubbing,

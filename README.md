@@ -14,10 +14,11 @@ als versionierte Dependency von mehreren Produkt-Repos referenziert wird.
 
 ## Status
 
-OTel-Traces-Setup (TF-849), Logging-Integration (`SpeculaLogHandler`, TF-850) und
-PII-Scrubbing (`PiiScrubber`/`scrub_pii`, TF-851) sind verfügbar (Traces/Logging extrahiert
-aus `ratum`-ADR-012, Scrubbing neu gebaut nach dem Vorbild von `examcraft-private`s Sentry-
-`EventScrubber`).
+OTel-Traces-Setup (TF-849), Logging-Integration (`SpeculaLogHandler`, TF-850),
+PII-Scrubbing (`PiiScrubber`/`scrub_pii`, TF-851) und URL-/Control-Char-Sanitizing
+(`sanitize_url`/`strip_control_chars`, TF-892) sind verfügbar (Traces/Logging/Sanitizing
+extrahiert aus `ratum`-ADR-012, Scrubbing neu gebaut nach dem Vorbild von `examcraft-private`s
+Sentry-`EventScrubber`).
 
 ## Installation
 
@@ -162,6 +163,31 @@ JSON-taugliche Skalare (`str`/`int`/`float`/`bool`/`bytes`/`None`). Ein nicht er
 Objekttyp (z.B. ein Pydantic-Modell) wird **nicht** still unredigiert durchgereicht, sondern
 löst einen `TypeError` aus — vorher explizit serialisieren (z.B. `.model_dump()`/
 `dataclasses.asdict()`).
+
+## Verwendung: Sanitizing (`sanitize_url`/`strip_control_chars`)
+
+Fuer roh geloggten Freitext ohne benannte Felder (URLs, Fehlermeldungen/Stacktraces aus einem
+unauthentifizierten Endpoint) — ergaenzt das feldnamen-basierte `PiiScrubber`-Scrubbing oben um
+Text-Sanitisierung:
+
+```python
+from specula_client import sanitize_url, strip_control_chars
+
+sanitize_url("https://example.com/reset-password?token=super-secret")
+# "https://example.com/reset-password"
+
+sanitize_url("https://example.com/sign/abc123def")
+# "https://example.com/sign/<redacted>"
+
+strip_control_chars("boom\nERROR app.security: fake admin login")
+# "boom ERROR app.security: fake admin login"
+```
+
+`sanitize_url()` strippt Query-String und Fragment pauschal (koennen Capability-Token tragen)
+und redigiert zusaetzlich `/sign/:token`-artige Pfad-Segmente. `strip_control_chars()`
+neutralisiert Newlines/Steuerzeichen (ausser Tab) — Schutz gegen Log-Injection in
+zeilenorientierte Formatter, typischerweise fuer einen bewusst unauthentifizierten
+Frontend-Fehler-Proxy-Endpoint (siehe `ratum`-ADR-012).
 
 ## Versionierung
 
