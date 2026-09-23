@@ -6,6 +6,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 folgt [SemVer](https://semver.org/lang/de/) ueber Git-Tags (`vX.Y.Z`) - siehe README,
 Abschnitt "Versionierung".
 
+## [0.1.4] - 2026-09-23
+
+### Behoben
+
+- **Fork-Safety** (TF-916): `SpeculaLogHandler`s prozessweiter Hintergrund-Sender-Thread
+  (`_get_specula_queue()`) hatte keine Fork-Awareness. Python-Threads überleben `fork()`
+  nicht, aber ein bereits vor dem Fork initialisierter Queue/Thread-Singleton wird
+  unverändert in Kind-Prozesse kopiert und wirkt dort gültig — betroffen insbesondere
+  Celerys `prefork`-Pool: Log-Einträge aus geforkten Kind-Prozessen wurden lautlos
+  verschluckt, nie versendet. `os.register_at_fork(after_in_child=...)` setzt den
+  Singleton jetzt nach jedem Fork zurück und erzwingt lazy Re-Initialisierung im
+  Kind-Prozess.
+
+[0.1.4]: https://github.com/talent-factory/specula-client-python/releases/tag/v0.1.4
+
 ## [0.1.3] - 2026-09-21
 
 ### Behoben
