@@ -7,6 +7,7 @@ dieser Bibliothek. Im Gegensatz zum ratum-Original hat `service_name` hier keine
 """
 
 import logging
+import os
 import queue
 import threading
 import time
@@ -645,3 +646,72 @@ def test_specula_log_handler_flush_without_prior_emit_does_not_start_worker():
     handler.flush()
 
     assert specula_logging._specula_queue is None
+
+
+# ---------------------------------------------------------------------------
+# TF-916: fork-safety -- the queue/worker-thread singleton must not survive
+# fork() (Celery's `prefork` pool forks child workers from a master process).
+# ---------------------------------------------------------------------------
+
+
+def test_reset_after_fork_clears_queue_and_thread():
+    """`_reset_after_fork()` must null out the singleton so the next
+    `_get_specula_queue()` call lazily creates a fresh queue/thread pair
+    instead of returning a pre-fork queue nothing drains in the child."""
+    specula_logging._get_specula_queue()  # seed a real queue/thread first
+    assert specula_logging._specula_queue is not None
+    assert specula_logging._specula_worker_thread is not None
+    original_lock = specula_logging._specula_worker_lock
+
+    specula_logging._reset_after_fork()
+
+    assert specula_logging._specula_queue is None
+    assert specula_logging._specula_worker_thread is None
+    # Rebuilt, not just released -- its state was copied verbatim from the
+    # parent and may have been mid-acquisition at fork time (see docstring).
+    assert specula_logging._specula_worker_lock is not original_lock
+
+
+def test_get_specula_queue_creates_fresh_instance_after_reset():
+    """After a reset, using the queue again must produce a NEW instance
+    (not the pre-reset one) and a live worker thread -- proves re-init is
+    actually lazy-triggered by the next real use, not just nulled forever."""
+    first = specula_logging._get_specula_queue()
+
+    specula_logging._reset_after_fork()
+    second = specula_logging._get_specula_queue()
+
+    assert second is not first
+    assert specula_logging._specula_worker_thread is not None
+    assert specula_logging._specula_worker_thread.is_alive()
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="fork() not available on this platform")
+def test_child_process_gets_a_fresh_queue_after_real_fork(monkeypatch):
+    """End-to-end proof against a REAL os.fork() (TF-916 regression guard):
+    seed the singleton in the parent (simulating an ERROR+ log emitted in a
+    Celery prefork master before it forks workers), fork, and verify the
+    child observes a cleared singleton -- i.e. `os.register_at_fork` is
+    actually wired up, not just the reset function existing in isolation."""
+    # Avoid a real network call if something in the child were to actually
+    # emit through the handler.
+    monkeypatch.setattr(specula_logging, "_send_to_specula", lambda *a, **k: None)
+    specula_logging._get_specula_queue()  # seed pre-fork, like a real master would
+
+    read_fd, write_fd = os.pipe()
+    pid = os.fork()
+    if pid == 0:  # child
+        os.close(read_fd)
+        result = b"1" if specula_logging._specula_queue is None else b"0"
+        os.write(write_fd, result)
+        os.close(write_fd)
+        os._exit(0)  # never let a forked test child fall back into pytest
+
+    os.close(write_fd)
+    try:
+        result = os.read(read_fd, 1)
+    finally:
+        os.close(read_fd)
+        os.waitpid(pid, 0)
+
+    assert result == b"1", "child process must observe a cleared queue singleton"
