@@ -40,6 +40,7 @@ routine-INFO-Logs nicht an den geteilten Collector gehen - DSGVO, siehe ratum-AD
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import sys
 import threading
@@ -115,6 +116,40 @@ def _get_specula_queue() -> queue.Queue[tuple[str, str, dict]]:
                 _specula_queue = new_queue
                 _specula_worker_thread = worker
     return _specula_queue
+
+
+def _reset_after_fork() -> None:
+    """Force lazy re-initialization of the queue/worker-thread singleton after
+    a ``fork()`` (TF-916).
+
+    Python threads do not survive ``fork()`` -- only the thread that called
+    ``fork()`` continues running in the child; any other thread (including
+    ``specula-log-sender``) simply ceases to exist there, while its Python
+    ``Thread`` object and the module-level queue it was draining are copied
+    into the child as-is, appearing perfectly valid. Without this reset, a
+    child process that inherits an ALREADY-initialized queue/thread pair
+    (e.g. because some other ERROR+ log ran through this handler in a
+    prefork server's master process before it forked workers, such as
+    Celery's ``prefork`` pool) would enqueue every subsequent log record
+    into a queue nothing drains -- a silent, permanent swallow with no
+    error anywhere.
+
+    Runs alone in the child, before any other application thread resumes
+    (``os.register_at_fork`` guarantee), so no lock acquisition is needed or
+    safe here -- ``_specula_worker_lock`` itself is rebuilt fresh rather than
+    acquired, since its underlying state was copied verbatim from the parent
+    and may have been mid-acquisition (held by a now-nonexistent thread) at
+    fork time.
+    """
+    global _specula_queue, _specula_worker_thread, _specula_worker_lock
+    _specula_queue = None
+    _specula_worker_thread = None
+    _specula_worker_lock = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    # Not available on Windows (no fork() there, so nothing to guard against).
+    os.register_at_fork(after_in_child=_reset_after_fork)
 
 
 _SEVERITY_NUMBER_BY_LEVEL = {
