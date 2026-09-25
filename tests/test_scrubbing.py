@@ -6,7 +6,13 @@ from types import MappingProxyType
 
 import pytest
 
-from specula_client.scrubbing import DEFAULT_DENYLIST, REDACTED, PiiScrubber, scrub_pii
+from specula_client.scrubbing import (
+    DEFAULT_DENYLIST,
+    REDACTED,
+    SPECULA_EXTRA_PREFIX,
+    PiiScrubber,
+    scrub_pii,
+)
 
 
 @pytest.mark.parametrize("field", ["password", "token", "api_key", "secret", "authorization"])
@@ -14,6 +20,15 @@ def test_default_denylist_covers_minimum_required_fields(field):
     # AC1: die in der Linear-Beschreibung geforderte Mindest-Denylist muss Teil des Defaults
     # sein, nicht nur optional per extra_denylist nachruestbar.
     assert field in DEFAULT_DENYLIST
+
+
+def test_specula_extra_prefix_matches_convention_used_by_log_extras():
+    # TF-937: einzige Quelle der Wahrheit fuer die "specula_"-Extra-Konvention, die sowohl
+    # `SpeculaLogHandler.emit()` (specula_client.logging) als auch Konsumenten (z.B. ratums
+    # `PiiScrubbingLogFilter`) auswerten - ein kuenftiger Library-Bump mit geaenderter
+    # Konvention aendert damit beide Stellen gemeinsam statt eine davon stillschweigend
+    # zurueckzulassen.
+    assert SPECULA_EXTRA_PREFIX == "specula_"
 
 
 def test_scrub_pii_redacts_top_level_denylisted_field():

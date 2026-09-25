@@ -6,6 +6,20 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 folgt [SemVer](https://semver.org/lang/de/) ueber Git-Tags (`vX.Y.Z`) - siehe README,
 Abschnitt "Versionierung".
 
+## [0.1.5] - 2026-09-25
+
+### Hinzugefügt
+
+- **`SPECULA_EXTRA_PREFIX`** (TF-937): die `"specula_"`-Extra-Praefix-Konvention, die
+  `SpeculaLogHandler.emit()` beim Umwandeln von `extra={"specula_xyz": ...}` in
+  OTLP-Attribute auswertet, ist jetzt als Konstante aus `specula_client` exportiert (statt
+  ein in `logging.py` hartkodiertes Literal). Konsumenten mit eigenem Scrubbing-Filter (z. B.
+  ratums `PiiScrubbingLogFilter`) sollen dieselbe Konstante importieren statt sie separat zu
+  duplizieren — verhindert, dass ein kuenftiger Bump dieser Konvention den Scrubbing-Filter
+  stillschweigend wirkungslos macht.
+
+[0.1.5]: https://github.com/talent-factory/specula-client-python/releases/tag/v0.1.5
+
 ## [0.1.4] - 2026-09-23
 
 ### Behoben

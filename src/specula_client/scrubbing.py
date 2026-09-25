@@ -46,6 +46,15 @@ from collections.abc import Iterable, Mapping
 
 REDACTED = "[REDACTED]"
 
+# Einzige Quelle der Wahrheit fuer die "specula_"-Extra-Konvention (TF-937): sowohl
+# `SpeculaLogHandler.emit()` (specula_client.logging, wandelt `specula_xyz` in ein
+# `specula.xyz`-OTLP-Attribut) als auch produktspezifische Scrubbing-Filter (z.B. ratums
+# `app.logging_config.PiiScrubbingLogFilter`) muessen denselben Praefix verwenden - vorher war
+# er in beiden, separat versionierten Paketen hartkodiert dupliziert, sodass ein kuenftiger
+# Library-Bump mit geaenderter Konvention den Scrubbing-Filter stillschweigend wirkungslos
+# gemacht haette (PII-Leak statt sichtbarem Fehler).
+SPECULA_EXTRA_PREFIX = "specula_"
+
 # Minimaldenylist aus AC1 (TF-851). Bewusst als `frozenset[str]` (nicht `list`): Ausdruck der
 # Absicht "ungeordnete Menge ohne Duplikate", zusaetzlich unveraenderlich - ein Aufrufer kann
 # dieses Modul-Konstante nicht versehentlich in-place mutieren und damit den Default fuer alle
