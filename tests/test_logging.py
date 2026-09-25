@@ -272,6 +272,37 @@ def test_specula_log_handler_emit_propagates_any_specula_extra_attribute(monkeyp
     assert attrs["specula.origin"] == "frontend"
 
 
+def test_specula_log_handler_emit_follows_shared_extra_prefix_constant(monkeypatch):
+    # TF-937: emit() darf den "specula_"-Praefix nicht als eigenes Literal hartkodieren,
+    # sondern muss die aus `specula_client.scrubbing` geteilte Konstante verwenden - sonst
+    # koennte ein kuenftiger Bump dieser Konvention (nur an EINER Stelle geaendert) den
+    # produktseitigen PII-Scrubbing-Filter (der dieselbe Konstante nutzt) stillschweigend von
+    # dem abkoppeln, was der Handler tatsaechlich exportiert.
+    _inline_queue(monkeypatch)
+    posted = []
+    monkeypatch.setattr(
+        specula_logging.httpx,
+        "post",
+        lambda url, *, headers, json, timeout: (posted.append(json), _FakeResponse())[1],
+    )
+    monkeypatch.setattr(specula_logging, "SPECULA_EXTRA_PREFIX", "vendor_")
+    handler = SpeculaLogHandler(
+        endpoint="http://collector.internal:4318",
+        team_api_key="team-key",
+        service_name="example-api",
+    )
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    record = _make_record(name="app.routers.monitoring", msg="prefix drift")
+    record.vendor_signal_type = "unhandled_exception"
+    record.specula_signal_type = "unhandled_exception"
+    handler.emit(record)
+
+    log_record = posted[0]["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]
+    keys = {a["key"] for a in log_record["attributes"]}
+    assert "vendor.signal_type" in keys
+    assert "specula.signal_type" not in keys
+
+
 def test_specula_log_handler_swallows_delivery_errors(monkeypatch, capsys):
     _inline_queue(monkeypatch)
 

@@ -50,6 +50,8 @@ import traceback
 import httpx
 from opentelemetry import trace as trace_api
 
+from specula_client.scrubbing import SPECULA_EXTRA_PREFIX
+
 # Bewusst eine BEGRENZTE Queue statt eines `ThreadPoolExecutor` mit unbegrenzter interner
 # Queue: ein traeger/haengender Collector wuerde bei anhaltendem Zufluss sonst einen monoton
 # wachsenden, nie begrenzten Backlog im Prozessspeicher aufbauen. Bei voller Queue wird der
@@ -234,7 +236,7 @@ class SpeculaLogHandler(logging.Handler):
             # fuer eine "nicht gesetzt" vs. "0/False/leer"-Unterscheidung muesste der
             # Aufrufer den Wert explizit als nicht-falsy uebergeben (z.B. `str(value)`).
             for key, value in vars(record).items():
-                if key.startswith("specula_") and value:
+                if key.startswith(SPECULA_EXTRA_PREFIX) and value:
                     otlp_key = key.replace("_", ".", 1)
                     attributes.append({"key": otlp_key, "value": {"stringValue": str(value)}})
             resource_attributes = [
